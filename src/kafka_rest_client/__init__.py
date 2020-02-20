@@ -1,3 +1,5 @@
-from .client import KafkaRestClient
+from .client import KafkaRestClient, KafkaRestClientException, TopicPartition
 
-__all__ = ['KafkaRestClient']
+__all__ = [
+    'KafkaRestClient', "KafkaRestClientException", "TopicPartition",
+]
