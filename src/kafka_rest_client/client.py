@@ -2,20 +2,24 @@ import requests
 import urllib
 import uuid
 import importlib_metadata
-import collections
 import json
 
+from collections import namedtuple, defaultdict
 from typing import List
 
 __all__ = [
-    'KafkaRestClient', 'KafkaRestClientException', 'TopicPartition',
+    'KafkaRestClient', 'KafkaRestClientException',
+    'TopicPartition', 'KafkaMessage'
 ]
 
 __version__ = importlib_metadata.version('kafka-rest-client')
 USER_AGENT = f"kafka-rest-client/{__version__}"
 
 
-TopicPartition = collections.namedtuple('TopicPartition', "topic, partition")
+TopicPartition = namedtuple('TopicPartition', "topic, partition")
+
+KafkaMessage = namedtuple("KafkaMessage",
+                          ["topic", "partition", "offset", "key", "value"])
 
 
 class KafkaRestClientException(Exception):
@@ -38,6 +42,7 @@ class KafkaRestClient:
                  server: str = "http://localhost:8082",
                  group_id: str = "",
                  fetch_max_bytes: int = 52428800,
+                 fetch_max_wait_ms: int = 500,
                  auto_offset_reset: str = "latest",
                  auto_commit_enable: bool = True,
                  max_poll_interval_ms: int = 300000,
@@ -47,6 +52,7 @@ class KafkaRestClient:
         self._server = server
         self._group_id = group_id or f"kafka-rest-client-{uuid.uuid4()}"
         self._fetch_max_bytes = fetch_max_bytes
+        self._fetch_max_wait_ms = fetch_max_wait_ms
         valid_reset = ("earliest", "latest")
         if auto_offset_reset not in valid_reset:
             raise ValueError(f"auto_offset_reset not in "
@@ -66,7 +72,8 @@ class KafkaRestClient:
                         f" {self._content_type}")
         if topics:
             self.subscribe(topics=topics)
-        self._observed_partition_offsets = {}
+        self._observed_offsets = {}
+        self._returned_offsets = {}
 
     def topics(self) -> List[str]:
         return self._get("topics")
@@ -91,7 +98,7 @@ class KafkaRestClient:
         if self._consumer is None:
             return
         if autocommit and self._auto_commit_enable:
-            self.commit(self._observed_partition_offsets)
+            self.commit(self._observed_offsets)
         self._delete(self._consumer)
 
     def commit(self, partitions):
@@ -109,6 +116,10 @@ class KafkaRestClient:
             rq = dict(topic_pattern=pattern)
         self._post(self.consumer, "subscription",
                    data=rq, validator=self._expect_no_content)
+        next(
+            self._poll_once(timeout_ms=10, max_records=1,
+                            max_bytes=1, update_offsets=False),
+            None)
 
     def subscription(self):
         rs = self._get(self.consumer, "subscription")
@@ -156,6 +167,45 @@ class KafkaRestClient:
     def seek_to_end(self, *partitions):
         self._seek(partitions, "end")
 
+    def poll(self, *, timeout_ms: int = 0, max_records: int = None,
+             update_offsets: bool = True):
+        ro = self._returned_offsets
+        self._observed_offsets.update(ro)
+        ro.clear()
+        msgs = self._poll_once(timeout_ms=timeout_ms,
+                               max_records=max_records,
+                               update_offsets=update_offsets)
+        ret = defaultdict(list)
+        for tp, msg in msgs:
+            ret[tp].append(msg)
+            ro[tp] = msg.offset
+        return ret
+
+    def _poll_once(self, *, timeout_ms: int = 0,
+                   max_records: int = None,
+                   max_bytes: int = None,
+                   update_offsets: bool = True):
+        rs = self._get(self.consumer, "records",
+                       params={
+                           "timeout": timeout_ms or self._fetch_max_wait_ms,
+                           "max_bytes": max_bytes or self._fetch_max_bytes})
+        for r in rs:
+            msg = KafkaMessage(topic=r["topic"],
+                               partition=r["partition"],
+                               offset=r["offset"],
+                               key=r["key"],
+                               value=r["value"])
+            tp = TopicPartition(topic=msg.topic,
+                                partition=msg.partition)
+            yield tp, msg
+
+    def __iter__(self):
+        oo = self._observed_offsets
+        while True:
+            for tp, msg in self._poll_once():
+                yield msg
+                oo[tp] = msg.offset
+
     def _seek(self, partitions, where):
         self._check_partitions(partitions)
         rq = {"partitions": [{"topic": partition.topic,
@@ -167,11 +217,11 @@ class KafkaRestClient:
     def _url(self, *url):
         return urllib.parse.urljoin(self._server, "/".join(url))
 
-    def _get(self, *url):
+    def _get(self, *url, params=None):
         r = requests.get(self._url(*url), headers={
             'user-agent': USER_AGENT,
             'accept': self._accept,
-        })
+        }, params=params)
         if r.status_code != requests.codes.ok:
             self._raise_response_error(r)
         return r.json()

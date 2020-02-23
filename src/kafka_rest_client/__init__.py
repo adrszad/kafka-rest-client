@@ -1,5 +1,9 @@
-from .client import KafkaRestClient, KafkaRestClientException, TopicPartition
+from .client import (
+    KafkaRestClient, KafkaRestClientException,
+    TopicPartition, KafkaMessage,
+)
 
 __all__ = [
-    'KafkaRestClient', "KafkaRestClientException", "TopicPartition",
+    'KafkaRestClient', "KafkaRestClientException",
+    "TopicPartition", "KafkaMessage",
 ]
