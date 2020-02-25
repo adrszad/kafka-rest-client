@@ -3,6 +3,7 @@ import urllib
 import uuid
 import importlib_metadata
 import json
+import base64
 
 from collections import namedtuple, defaultdict
 from typing import List
@@ -62,6 +63,10 @@ class KafkaRestClient:
             raise ValueError(f"format not in "
                              f"{valid_format}, got {format}")
         self._format = format
+        if self._format == "binary":
+            self._decode = base64.b64decode
+        else:
+            self._decode = lambda x: x
         self._auto_offset_reset = auto_offset_reset
         if auto_commit_enable:
             raise RuntimeError("autocommit is not implemented yet")
@@ -193,8 +198,8 @@ class KafkaRestClient:
             msg = KafkaMessage(topic=r["topic"],
                                partition=r["partition"],
                                offset=r["offset"],
-                               key=r["key"],
-                               value=r["value"])
+                               key=self._decode(r["key"]),
+                               value=self._decode(r["value"]))
             tp = TopicPartition(topic=msg.topic,
                                 partition=msg.partition)
             yield tp, msg
