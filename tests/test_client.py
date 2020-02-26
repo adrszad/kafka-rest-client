@@ -8,7 +8,7 @@ from kafka_rest_client import KafkaRestClient, TopicPartition, KafkaMessage
 @fixture
 def client(request):
     client = KafkaRestClient(group_id=request.function.__name__,
-                             auto_commit_enable=False)
+                             enable_auto_commit=False)
     yield client
     client.close()
 
@@ -45,7 +45,7 @@ def nonempty_topics(client, topics):
 
 
 def test_construction():
-    KafkaRestClient(auto_commit_enable=False)
+    KafkaRestClient(enable_auto_commit=False)
 
 
 def test_topics(client):

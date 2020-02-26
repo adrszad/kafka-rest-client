@@ -45,7 +45,7 @@ class KafkaRestClient:
                  fetch_max_bytes: int = 52428800,
                  fetch_max_wait_ms: int = 500,
                  auto_offset_reset: str = "latest",
-                 auto_commit_enable: bool = True,
+                 enable_auto_commit: bool = True,
                  max_poll_interval_ms: int = 300000,
                  format: str = "binary"):
         """
@@ -68,9 +68,9 @@ class KafkaRestClient:
         else:
             self._decode = lambda x: x
         self._auto_offset_reset = auto_offset_reset
-        if auto_commit_enable:
+        if enable_auto_commit:
             raise RuntimeError("autocommit is not implemented yet")
-        self._auto_commit_enable = auto_commit_enable
+        self._enable_auto_commit = enable_auto_commit
         self._max_poll_interval_ms = max_poll_interval_ms
         self._content_type = f"application/vnd.kafka.v2+json"
         self._accept = (f"application/vnd.kafka.{self._format}.v2+json,"
@@ -92,7 +92,7 @@ class KafkaRestClient:
         rq = {
             "format": self._format,
             "auto.offset.reset": self._auto_offset_reset,
-            "auto.commit.enable": self._auto_commit_enable,
+            "auto.commit.enable": self._enable_auto_commit,
         }
         rs = self._post("consumers", self._group_id, data=rq)
         self._consumer = rs.get("base_uri")
@@ -102,7 +102,7 @@ class KafkaRestClient:
     def close(self, autocommit=True):
         if self._consumer is None:
             return
-        if autocommit and self._auto_commit_enable:
+        if autocommit and self._enable_auto_commit:
             self.commit(self._observed_offsets)
         self._delete(self._consumer)
 
