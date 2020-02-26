@@ -135,6 +135,9 @@ class KafkaRestClient:
         rs = self._get(self.consumer, "subscription")
         return set(rs.get("topics", []))
 
+    def unsubscribe(self):
+        self._delete(self.consumer, "subscription")
+
     def partitions_for_topic(self, topic):
         assert "/" not in topic
         rs = self._get('topics', topic)
