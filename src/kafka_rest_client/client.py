@@ -253,7 +253,8 @@ class KafkaRestClient:
 
     def _response(self, r):
         ret = r.json()
-        log.info("Received %s", json.dumps(ret))
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Received %s", json.dumps(ret))
         return ret
 
     def _post(self, *url, data=None, validator=None):
