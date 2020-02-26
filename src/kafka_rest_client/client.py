@@ -4,6 +4,7 @@ import uuid
 import importlib_metadata
 import json
 import base64
+import logging
 
 from collections import namedtuple, defaultdict
 from typing import List
@@ -12,6 +13,8 @@ __all__ = [
     'KafkaRestClient', 'KafkaRestClientException',
     'TopicPartition', 'KafkaMessage'
 ]
+
+log = logging.getLogger(name="kafka-rest-client")
 
 __version__ = importlib_metadata.version('kafka-rest-client')
 USER_AGENT = f"kafka-rest-client/{__version__}"
@@ -225,29 +228,39 @@ class KafkaRestClient:
         return urllib.parse.urljoin(self._server, "/".join(url))
 
     def _get(self, *url, params=None):
-        r = requests.get(self._url(*url), headers={
+        addr = self._url(*url)
+        log.info("GET %s", addr)
+        r = requests.get(addr, headers={
             'user-agent': USER_AGENT,
             'accept': self._accept,
         }, params=params)
         if r.status_code != requests.codes.ok:
             self._raise_response_error(r)
-        return r.json()
+        return self._response(r)
+
+    def _response(self, r):
+        ret = r.json()
+        log.info("Received %s", json.dumps(ret))
+        return ret
 
     def _post(self, *url, data=None, validator=None):
         if data is None:
             assert TypeError("no data to post")
+        addr = self._url(*url)
         headers = {
             'user-agent': USER_AGENT,
             'accept': self._accept,
             'content-type': self._content_type,
         }
-        r = requests.post(self._url(*url),
+        jdata = json.dumps(data)
+        log.info("POST %s %s", addr, jdata)
+        r = requests.post(addr,
                           headers=headers,
-                          data=json.dumps(data))
+                          data=jdata)
         (validator or self._expect_ok)(r)
         if r.status_code == requests.codes.no_content:
             return None
-        return r.json()
+        return self._response(r)
 
     def _delete(self, *url):
         headers = {
@@ -273,7 +286,8 @@ class KafkaRestClient:
         except ValueError:
             r.raise_for_status()
             err = {}
-        raise KafkaRestClientException(message=err.get("message"),
+        exc = KafkaRestClientException(message=err.get("message"),
                                        error_code=err.get("error_code"),
                                        http_code=r.status_code,
                                        http_message=r.reason)
+        raise exc
