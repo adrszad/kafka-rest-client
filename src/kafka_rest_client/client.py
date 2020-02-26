@@ -100,7 +100,7 @@ class KafkaRestClient:
             "auto.commit.enable": self._enable_auto_commit,
         }
         rs = self._post("consumers", self._group_id, data=rq)
-        self._consumer = rs.get("base_uri")
+        self._consumer = self._normalize_url(rs.get("base_uri"))
         self._instance_id = rs.get("instance_id")
         return self._consumer
 
@@ -237,6 +237,16 @@ class KafkaRestClient:
         if r.status_code != requests.codes.ok:
             self._raise_response_error(r)
         return self._response(r)
+
+    def _normalize_url(self, *url):
+        addr = self._url(*url)
+        log.info("HEAD %s", addr)
+        r = requests.head(addr,
+                          headers={
+                              'user-agent': USER_AGENT,
+                          },
+                          allow_redirects=True)
+        return r.url
 
     def _response(self, r):
         ret = r.json()
