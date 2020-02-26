@@ -64,7 +64,9 @@ class KafkaRestClient:
                              f"{valid_format}, got {format}")
         self._format = format
         if self._format == "binary":
-            self._decode = base64.b64decode
+            self._decode = lambda x: (base64.b64decode(x)
+                                      if x is not None
+                                      else None)
         else:
             self._decode = lambda x: x
         self._auto_offset_reset = auto_offset_reset
