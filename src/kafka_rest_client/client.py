@@ -140,8 +140,8 @@ class KafkaRestClient:
 
     def partitions_for_topic(self, topic):
         assert "/" not in topic
-        rs = self._get('topics', topic)
-        return set(p["partition"] for p in rs["partitions"])
+        rs = self._get('topics', topic, 'partitions')
+        return set(p["partition"] for p in rs)
 
     def beginning_offsets(self, partitions: List[TopicPartition]):
         return dict(self._get_offsets(partitions, 'beginning_offset'))
