@@ -35,13 +35,19 @@ setup(
     packages=find_packages(where='src'),
     python_requires='>=3.7, <4',
     install_requires=['requests',
-                      'marshmallow'],
+                      'marshmallow',
+                      'docopt'],
     extras_require={
         'dev': ['check-manifest',
                 'flake8',
                 'pytest',
                 'tox'],
         'test': ['coverage'],
+    },
+    entry_points={
+        'console_scripts': [
+            'kafka-rest-cat=kafka_rest_client.cat:main',
+        ],
     },
     project_urls={
         'Bug Reports': 'https://github.com/digiverse/kafka-rest-client/issues',
