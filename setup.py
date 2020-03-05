@@ -36,7 +36,8 @@ setup(
     python_requires='>=3.7, <4',
     install_requires=['requests',
                       'marshmallow',
-                      'docopt'],
+                      'docopt',
+                      'importlib-metadata'],
     extras_require={
         'dev': ['check-manifest',
                 'flake8',
