@@ -127,8 +127,8 @@ class KafkaRestClient:
         self._post(self.consumer, "subscription",
                    data=rq, validator=self._expect_no_content)
         next(
-            self._poll_once(timeout_ms=10, max_records=1,
-                            max_bytes=1, update_offsets=False),
+            self._poll_once(timeout_ms=10, max_records=2,
+                            max_bytes=10000, update_offsets=False),
             None)
 
     def subscription(self):
