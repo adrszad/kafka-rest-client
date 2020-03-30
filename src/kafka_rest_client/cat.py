@@ -66,7 +66,10 @@ def consume(*, server, topic,
             if ends[tp] == msg.offset + 1:
                 active.discard(tp)
             return bool(active)
-        consumer = takewhile(pending, consumer)
+        if active:
+            consumer = takewhile(pending, consumer)
+        else:
+            consumer = ()
     for msg in consumer:
         print(json.dumps(msg._asdict(), default=dumpbin))
     client.unsubscribe()
