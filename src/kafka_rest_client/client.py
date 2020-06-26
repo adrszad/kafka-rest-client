@@ -6,7 +6,7 @@ import json
 import base64
 import logging
 
-from collections import namedtuple, defaultdict
+from collections import namedtuple, defaultdict, ChainMap
 from typing import List
 
 __all__ = [
@@ -24,7 +24,6 @@ TopicPartition = namedtuple('TopicPartition', "topic, partition")
 
 KafkaMessage = namedtuple("KafkaMessage",
                           ["topic", "partition", "offset", "key", "value"])
-
 
 class KafkaRestClientException(Exception):
     def __init__(self, message, *, error_code, http_code, http_message):
@@ -50,7 +49,8 @@ class KafkaRestClient:
                  auto_offset_reset: str = "latest",
                  enable_auto_commit: bool = True,
                  max_poll_interval_ms: int = 300000,
-                 format: str = "binary"):
+                 format: str = "binary",
+                 stop_at_end = False):
         """
         """
         self._server = server
@@ -84,6 +84,9 @@ class KafkaRestClient:
             self.subscribe(topics=topics)
         self._observed_offsets = {}
         self._returned_offsets = {}
+        self._stop_at_end = stop_at_end
+        self._seek_offsets = {}
+        self._current_offsets = ChainMap(self._observed_offsets, self._seek_offsets)
 
     def topics(self) -> List[str]:
         return self._get("topics")
@@ -173,12 +176,15 @@ class KafkaRestClient:
             "offset": offset}]}
         self._post(self.consumer, "positions",
                    data=rq, validator=self._expect_no_content)
+        self._seek_offsets[partition] = offset
 
     def seek_to_beginning(self, *partitions):
         self._seek(partitions, "beginning")
+        self._seek_offsets.update(self.beginning_offsets(partitions))
 
     def seek_to_end(self, *partitions):
         self._seek(partitions, "end")
+        self._seek_offsets.update(self.end_offsets(partitions))
 
     def poll(self, *, timeout_ms: int = 0, max_records: int = None,
              update_offsets: bool = True):
@@ -214,10 +220,31 @@ class KafkaRestClient:
 
     def __iter__(self):
         oo = self._observed_offsets
-        while True:
+
+        topic_partitions = [TopicPartition(t, p)
+                            for t in self.subscription()
+                            for p in self.partitions_for_topic(t)]
+        beginnings = self.beginning_offsets(topic_partitions)
+        ends = self.end_offsets(topic_partitions)
+        active_partitions = ends.copy()
+        for tp in topic_partitions:
+            if tp not in self._current_offsets:
+                if self._auto_offset_reset == 'earliest':
+                    self._seek_offsets[tp] = beginnings[tp]
+                elif self._auto_offset_reset == 'latest':
+                    self._seek_offsets[tp] = ends[tp]
+                else:
+                    raise TypeError(f"Unhandled auto_offset_reset {self._auto_offset_reset}")
+            curr = self._current_offsets[tp]
+            if curr + 1 > active_partitions[tp]:
+                active_partitions.pop(tp)
+        while active_partitions or not self._stop_at_end:
             for tp, msg in self._poll_once():
                 yield msg
                 oo[tp] = msg.offset
+                end = active_partitions.get(tp)
+                if msg.offset + 1 >= end:
+                    active_partitions.pop(tp, None)
 
     def _seek(self, partitions, where):
         self._check_partitions(partitions)
