@@ -4,19 +4,23 @@ from pytest import fixture
 
 from kafka_rest_client import KafkaRestClient, TopicPartition, KafkaMessage
 
+@fixture
+def topic_for_test():
+    return "kafka-rest-client-test"
 
 @fixture
 def client(request):
     client = KafkaRestClient(group_id=request.function.__name__,
-                             enable_auto_commit=False)
+                             enable_auto_commit=False,
+                             stop_at_end=True)
     yield client
     client.close()
 
 
 @fixture
-def subscribed_client(client):
+def subscribed_client(client, topic_for_test):
     nonempty = list(itertools.islice(
-        nonempty_topics(client, ["kafka-rest-client-test"]),
+        nonempty_topics(client, [topic_for_test]),
         3))
     assert nonempty
     topics = [x[0] for x in nonempty]
@@ -79,6 +83,13 @@ def test_subscribe_topic(client):
     subs = client.subscription()
     assert set(topics) == subs
 
+def test_empty_subscription(client):
+    sub = client.subscription()
+    assert not sub
+
+def test_subscription(subscribed_client):
+    sub = subscribed_client.subscription()
+    assert sub
 
 def test_poll(subscribed_client):
     msgs = subscribed_client.poll(timeout_ms=1000)
@@ -92,6 +103,17 @@ def test_poll(subscribed_client):
 
 
 def test_iterator(subscribed_client):
+    msgs = list(itertools.islice(subscribed_client, 3))
+    assert msgs
+    for msg in msgs:
+        assert isinstance(msg, KafkaMessage)
+
+def test_iterator_last_message(subscribed_client, topic_for_test):
+    ends = subscribed_client.end_offsets(
+        [TopicPartition(topic_for_test, p)
+         for p in subscribed_client.partitions_for_topic(topic_for_test)])
+    for tp, end in ends.items():
+        subscribed_client.seek(tp, end - 1)
     msgs = list(itertools.islice(subscribed_client, 3))
     assert msgs
     for msg in msgs:

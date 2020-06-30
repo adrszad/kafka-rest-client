@@ -2,7 +2,7 @@
 Apache Kafka rest proxy consumer tool
 
 Usage:
-  kafka-rest-cat -C -s SERVER -t TOPIC [-o OFFSET] [-c COUNT] -e
+  kafka-rest-cat -C -s SERVER -t TOPIC [-o OFFSET] [-c COUNT] [-e]
   kafka-rest-cat -L -s SERVER [-t TOPIC] [-v]
   kafka-rest-cat how how
 
@@ -35,7 +35,8 @@ def consume(*, server, topic,
             stop_at_end=False):
     client = KafkaRestClient(topic,
                              server=server,
-                             enable_auto_commit=False)
+                             enable_auto_commit=False,
+                             stop_at_end=stop_at_end)
     partitions = [TopicPartition(topic, p)
                   for p in client.partitions_for_topic(topic)]
     ends = client.end_offsets(partitions)
@@ -59,17 +60,6 @@ def consume(*, server, topic,
         count = int(count)
         assert count > 0
         consumer = islice(consumer, count)
-    if stop_at_end:
-        active = {p for p in partitions if ends[p] > starts[p]}
-        def pending(msg):
-            tp = TopicPartition(msg.topic, msg.partition)
-            if ends[tp] == msg.offset + 1:
-                active.discard(tp)
-            return bool(active)
-        if active:
-            consumer = takewhile(pending, consumer)
-        else:
-            consumer = ()
     for msg in consumer:
         print(json.dumps(msg._asdict(), default=dumpbin))
     client.unsubscribe()
