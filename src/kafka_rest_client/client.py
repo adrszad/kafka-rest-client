@@ -242,7 +242,7 @@ class KafkaRestClient:
             for tp, msg in self._poll_once():
                 yield msg
                 oo[tp] = msg.offset
-                end = active_partitions.get(tp)
+                end = ends.get(tp)
                 if msg.offset + 1 >= end:
                     active_partitions.pop(tp, None)
 
