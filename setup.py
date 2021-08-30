@@ -12,7 +12,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    name='kafka-rest-client',
+    name='kafka_rest_client',
     use_scm_version={"root": ".", "relative_to": __file__},
     setup_requires=['setuptools_scm'],
     description='kafka-rest client',
